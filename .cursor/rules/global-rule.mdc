@@ -1,0 +1,17 @@
+---
+alwaysApply: true
+---
+
+Rule 1:
+如果不确定 MinerU API 具体调用方式，不要猜测。
+先查阅当前安装版本的 MinerU 文档后再实现。
+
+Rule 2:
+所有 AI 调用统一经过 llm/base.py。
+后续我要随时切换：
+GPT
+Claude
+DeepSeek
+Gemini
+OpenRouter
+而无需修改业务代码。

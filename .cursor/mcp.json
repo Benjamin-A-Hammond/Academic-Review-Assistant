@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "review-agent": {
+      "command": "python",
+      "args": ["${workspaceFolder}/run_mcp.py"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      }
+    }
+  }
+}
