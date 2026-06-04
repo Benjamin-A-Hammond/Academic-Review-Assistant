@@ -131,7 +131,7 @@ python main.py runs clean --all --dry-run
 | 形态 | 用途 |
 |------|------|
 | **CLI** | 本地终端直接跑 `python main.py run ...` |
-| **MCP Server** | 供 Cursor / 其他 MCP 宿主调用工具 |
+| **MCP Server** | 供 Cursor、OpenAI Codex 及其他 MCP 宿主调用工具 |
 
 MCP 不是替代 CLI，而是在 IDE 里把**投稿前自查 / 模拟审稿**流程暴露为工具（`review_run_pdf`、`review_resume`、`review_check_env` 等）。**仅适用于作者处理自有稿件**；请勿通过 MCP 上传审稿任务中的他人未发表论文。
 
@@ -148,6 +148,57 @@ python run_mcp.py
 # 或
 python main.py mcp
 ```
+
+### 在 OpenAI Codex 中启用
+
+完成 [快速开始](#快速开始)（虚拟环境、依赖与 `.env` 配置）后，将下列配置追加到 `~/.codex/config.toml`，即可在 Codex 中注册本项目的 MCP 服务。
+
+将 `<PROJECT_ROOT>` 替换为本仓库的**绝对路径**。Windows 下建议使用正斜杠（例如 `C:/path/to/Review-agent`）。`command` 应指向虚拟环境中的 Python，以确保依赖可用。
+
+```toml
+[mcp_servers.review-agent]
+command = "<PROJECT_ROOT>/.venv/Scripts/python.exe"
+args = ["<PROJECT_ROOT>/run_mcp.py"]
+cwd = "<PROJECT_ROOT>"
+startup_timeout_sec = 30
+tool_timeout_sec = 600
+
+[mcp_servers.review-agent.env]
+PYTHONIOENCODING = "utf-8"
+
+[mcp_servers.review-agent.tools.review_check_env]
+approval_mode = "approve"
+
+[mcp_servers.review-agent.tools.review_run_pdf]
+approval_mode = "approve"
+
+[mcp_servers.review-agent.tools.review_list_runs]
+approval_mode = "approve"
+
+[mcp_servers.review-agent.tools.review_run_status]
+approval_mode = "approve"
+
+[mcp_servers.review-agent.tools.review_resume]
+approval_mode = "approve"
+
+[mcp_servers.review-agent.tools.review_read_report]
+approval_mode = "approve"
+```
+
+| 配置项 | 说明 |
+|--------|------|
+| `command` / `args` | 通过项目 venv 中的 Python 启动 `run_mcp.py` |
+| `cwd` | 工作目录，使相对路径（`data/runs/`、`.env`）正确解析 |
+| `startup_timeout_sec` | 服务启动最长等待 30 秒 |
+| `tool_timeout_sec` | 单次工具调用最长 600 秒（10 分钟）；完整 PDF 流程若超时可适当增大 |
+| `PYTHONIOENCODING` | Windows 下强制 stdout/stderr 使用 UTF-8 |
+| `approval_mode = "approve"` | 所列工具执行前须用户显式确认（推荐，尤其适用于耗时或读写文件的操作） |
+
+Linux / macOS 请将 `command` 改为 `<PROJECT_ROOT>/.venv/bin/python`。
+
+可选：若希望对清理 run 同样要求确认，可追加 `[mcp_servers.review-agent.tools.review_clean_runs]` 并设置 `approval_mode = "approve"`。
+
+修改 `config.toml` 后，请重启 Codex 或重新加载 MCP 配置。
 
 ### MCP 工具一览
 

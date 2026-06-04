@@ -131,7 +131,7 @@ This project offers both:
 | Form | Use |
 |------|-----|
 | **CLI** | `python main.py run ...` in terminal |
-| **MCP Server** | Tools for Cursor / other MCP hosts |
+| **MCP Server** | Tools for Cursor, OpenAI Codex, and other MCP hosts |
 
 MCP does not replace the CLI; it exposes **pre-submission self-check / simulated review** in the IDE (`review_run_pdf`, `review_resume`, `review_check_env`, etc.). **Authors’ own manuscripts only** — do not upload others’ unpublished papers from review assignments.
 
@@ -148,6 +148,57 @@ python run_mcp.py
 # or
 python main.py mcp
 ```
+
+### Enable in OpenAI Codex
+
+After completing [Quick start](#quick-start) (virtual environment, dependencies, and `.env`), register this project as an MCP server in Codex by appending the block below to `~/.codex/config.toml`.
+
+Replace `<PROJECT_ROOT>` with the **absolute path** to this repository. On Windows, prefer forward slashes (e.g. `C:/path/to/Review-agent`). Use the virtual environment’s Python interpreter so dependencies resolve correctly.
+
+```toml
+[mcp_servers.review-agent]
+command = "<PROJECT_ROOT>/.venv/Scripts/python.exe"
+args = ["<PROJECT_ROOT>/run_mcp.py"]
+cwd = "<PROJECT_ROOT>"
+startup_timeout_sec = 30
+tool_timeout_sec = 600
+
+[mcp_servers.review-agent.env]
+PYTHONIOENCODING = "utf-8"
+
+[mcp_servers.review-agent.tools.review_check_env]
+approval_mode = "approve"
+
+[mcp_servers.review-agent.tools.review_run_pdf]
+approval_mode = "approve"
+
+[mcp_servers.review-agent.tools.review_list_runs]
+approval_mode = "approve"
+
+[mcp_servers.review-agent.tools.review_run_status]
+approval_mode = "approve"
+
+[mcp_servers.review-agent.tools.review_resume]
+approval_mode = "approve"
+
+[mcp_servers.review-agent.tools.review_read_report]
+approval_mode = "approve"
+```
+
+| Setting | Purpose |
+|---------|---------|
+| `command` / `args` | Launch the MCP server via `run_mcp.py` inside the project venv |
+| `cwd` | Working directory so relative paths (`data/runs/`, `.env`) resolve correctly |
+| `startup_timeout_sec` | Allow up to 30 s for server startup |
+| `tool_timeout_sec` | Allow up to 600 s (10 min) per tool call; increase if full PDF runs time out |
+| `PYTHONIOENCODING` | Force UTF-8 for stdout/stderr on Windows |
+| `approval_mode = "approve"` | Require explicit user approval before each listed tool runs (recommended for long-running or file-access operations) |
+
+On Linux or macOS, set `command` to `<PROJECT_ROOT>/.venv/bin/python` instead.
+
+Optional: add `[mcp_servers.review-agent.tools.review_clean_runs]` with `approval_mode = "approve"` if you want the same guard on run cleanup.
+
+Restart Codex (or reload MCP configuration) after editing `config.toml`.
 
 ### MCP tools
 
