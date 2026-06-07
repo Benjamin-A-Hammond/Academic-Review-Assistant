@@ -39,6 +39,7 @@ flowchart LR
 | 1. 解析 | PDF → 结构化 Markdown | MinerU 云端 API（可缓存） | `<论文名>.md` |
 | 2. 质量检查 | 规则检测解析是否可用 | 本地规则 | `quality_report.md`（过低则中止） |
 | 3. 章节识别 | Fast 按任务（contribution / experiment / review）绑定多个 heading，生成字符区间 | **Fast** LLM | `section_map.json` |
+| 3b. 参考文献拆分 | Fast 识别参考文献标题并切出；再经 Fast 裁剪附录/表格等非文献内容（原文子串，不改写条目） | **Fast** LLM（两次） | `references.md`（并更新 `section_map.json` 中的 `reference_binding`） |
 | 4. 贡献分析 | 按章节摘录精读，评估创新点与表述 | **Pro** LLM | `contribution.md` |
 | 5. 实验分析 | 按章节摘录精读，评估实验设计与结果 | **Pro** LLM | `experiment.md` |
 | 6. 模拟审稿 | 结合上文分析与 `section_map` 相关章节，生成**模拟**审稿意见 | **Pro**；若配置 `PRO2_*` 则为 Pro + Pro2 双路后合并 | `review_draft.md`；`OUTPUT_LANG=zh` 时另有 `review_draft_zh.md` |
@@ -54,7 +55,8 @@ flowchart LR
 
 - 使用 `run --work-dir data/runs/<文件夹>` 时，流水线**只使用工作区内的 PDF**，忽略同时传入的 `pdf_path`（会打 warning 日志）。
 - 某步输出文件已存在则**跳过该步**；若要重跑，先删除对应文件，例如：
-  - 重跑章节识别：删除 `section_map.json`（后续贡献/实验/审稿会随之重跑，除非也单独删它们的产物）
+  - 重跑章节识别：删除 `section_map.json`（后续参考文献拆分、贡献/实验/审稿会随之重跑，除非也单独删它们的产物）
+  - 仅重跑参考文献拆分：删除 `references.md`（若 `section_map.json` 仍含 `reference_binding` 则无需再调 Fast）
   - 单模型改双模型合并：删除 `review_draft.md`（及需重译时的 `review_draft_zh.md`）
   - 质量检查未通过但已换新 Markdown：删除 `quality_report.md` 或连同 `.md` 一并重跑解析
 - 日志中的 `Step 1`–`Step 6` 与上表阶段编号一致。
@@ -111,6 +113,11 @@ python main.py runs list
 python main.py runs clean --older-than-days 7 --dry-run   # 先预览
 python main.py runs clean --older-than-days 7             # 确认后真删（CLI 默认会删除）
 python main.py runs clean --all --dry-run
+
+# 仅 PDF → Markdown（不跑 LLM 审稿步骤）
+python main.py convert path/to/paper.pdf
+python main.py convert --work-dir data/runs/PaperName_20260101_120000
+python main.py convert paper.pdf --quality-check   # 可选：转换后做本地质量检查
 ```
 
 **清理说明：** CLI 的 `runs clean` **默认直接删除**（加 `--dry-run` 仅预览）。MCP 工具 `review_clean_runs` **默认 `dry_run=true`**，需显式 `dry_run=false` 才会删除。
@@ -200,7 +207,54 @@ Linux / macOS 请将 `command` 改为 `<PROJECT_ROOT>/.venv/bin/python`。
 
 修改 `config.toml` 后，请重启 Codex 或重新加载 MCP 配置。
 
-### MCP 工具一览
+### 仅 PDF → Markdown（Codex / 其他 Agent）
+
+若 Agent **只需要 MinerU 解析**，不需要模拟审稿，请注册独立的 **PDF→MD MCP 服务**（`run_mcp_convert.py`），与完整审稿服务分开配置：
+
+```toml
+[mcp_servers.review-pdf2md]
+command = "<PROJECT_ROOT>/.venv/Scripts/python.exe"
+args = ["<PROJECT_ROOT>/run_mcp_convert.py"]
+cwd = "<PROJECT_ROOT>"
+startup_timeout_sec = 30
+tool_timeout_sec = 600
+
+[mcp_servers.review-pdf2md.env]
+PYTHONIOENCODING = "utf-8"
+
+[mcp_servers.review-pdf2md.tools.pdf2md_check_env]
+approval_mode = "approve"
+
+[mcp_servers.review-pdf2md.tools.pdf2md_convert]
+approval_mode = "approve"
+
+[mcp_servers.review-pdf2md.tools.pdf2md_resume]
+approval_mode = "approve"
+
+[mcp_servers.review-pdf2md.tools.pdf2md_read_markdown]
+approval_mode = "approve"
+```
+
+Linux / macOS 请将 `command` 改为 `<PROJECT_ROOT>/.venv/bin/python`。
+
+| 工具 | 说明 |
+|------|------|
+| `pdf2md_check_env` | 仅检查 MinerU API |
+| `pdf2md_convert` | 对新 PDF 做 MinerU 解析，产出 `<论文名>.md` |
+| `pdf2md_resume` | 从已有 `data/runs/...` 工作区续跑（已有 md 则跳过） |
+| `pdf2md_read_markdown` | 读取工作区中的 Markdown 内容 |
+
+手动启动（调试）：
+
+```bash
+python run_mcp_convert.py
+# 或
+python main.py mcp-convert
+```
+
+实现见 `review_agent/mcp_convert_server.py`。CLI 等价命令：`python main.py convert paper.pdf`。
+
+### MCP 工具一览（完整审稿）
 
 | 工具 | 说明 |
 |------|------|

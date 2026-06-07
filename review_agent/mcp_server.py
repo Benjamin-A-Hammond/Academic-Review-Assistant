@@ -148,7 +148,7 @@ def review_read_report(
 ) -> str:
     """
     Read a generated report from a run workspace.
-    filename: e.g. review_draft.md, contribution.md, experiment.md
+    filename: e.g. review_draft.md, contribution.md, experiment.md, references.md
     """
     try:
         return _json_result(

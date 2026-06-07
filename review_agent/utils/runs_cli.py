@@ -39,6 +39,7 @@ def _format_size(num_bytes: int) -> str:
 def _outputs_label(run_dir: Path) -> str:
     markers = [
         "section_map.json",
+        "references.md",
         "contribution.md",
         "experiment.md",
         "review_draft.md",

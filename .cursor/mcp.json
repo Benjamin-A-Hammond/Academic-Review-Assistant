@@ -7,6 +7,14 @@
       "env": {
         "PYTHONIOENCODING": "utf-8"
       }
+    },
+    "review-pdf2md": {
+      "command": "python",
+      "args": ["${workspaceFolder}/run_mcp_convert.py"],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONIOENCODING": "utf-8"
+      }
     }
   }
 }

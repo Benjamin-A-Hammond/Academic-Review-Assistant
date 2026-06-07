@@ -39,6 +39,7 @@ flowchart LR
 | 1. Parse | PDF → structured Markdown | MinerU cloud API (cacheable) | `<paper_name>.md` |
 | 2. Quality check | Rule-based parse usability | Local rules | `quality_report.md` (abort if too low) |
 | 3. Section map | Fast binds multiple headings per task (contribution / experiment / review), char ranges | **Fast** LLM | `section_map.json` |
+| 3b. Reference split | Fast detects heading, verbatim slice, then Fast trims non-bibliography tail/head (tables, appendix, etc.) | **Fast** LLM (×2) | `references.md` (updates `reference_binding` in `section_map.json`) |
 | 4. Contribution | Section excerpts, innovation & framing | **Pro** LLM | `contribution.md` |
 | 5. Experiment | Section excerpts, design & results | **Pro** LLM | `experiment.md` |
 | 6. Simulated review | Uses prior analysis + `section_map` sections | **Pro**; with `PRO2_*`, Pro + Pro2 merged | `review_draft.md`; with `OUTPUT_LANG=zh`, also `review_draft_zh.md` |
@@ -54,7 +55,8 @@ Authors usually read first: `contribution.md`, `experiment.md`, `review_draft.md
 
 - With `run --work-dir data/runs/<folder>`, the pipeline **uses only the PDF in that workspace**; a simultaneous `pdf_path` is ignored (warning logged).
 - If a step’s output exists, that step is **skipped**. To re-run, delete the file first, e.g.:
-  - Re-run section map: delete `section_map.json` (downstream steps re-run unless their outputs are deleted too)
+  - Re-run section map: delete `section_map.json` (reference split and downstream steps re-run unless their outputs are deleted too)
+  - Re-run reference split only: delete `references.md` (if `section_map.json` still has `reference_binding`, Fast is skipped)
   - Switch single → dual merge: delete `review_draft.md` (and `review_draft_zh.md` if re-translation needed)
   - Quality failed but Markdown replaced: delete `quality_report.md` or re-run parsing
 - Log lines `Step 1`–`Step 6` match the table above.
@@ -111,6 +113,11 @@ python main.py runs list
 python main.py runs clean --older-than-days 7 --dry-run   # preview
 python main.py runs clean --older-than-days 7             # delete (CLI deletes by default)
 python main.py runs clean --all --dry-run
+
+# PDF → Markdown only (no LLM review steps)
+python main.py convert path/to/paper.pdf
+python main.py convert --work-dir data/runs/PaperName_20260101_120000
+python main.py convert paper.pdf --quality-check   # optional local quality check
 ```
 
 **Cleanup:** CLI `runs clean` **deletes by default** (`--dry-run` previews). MCP `review_clean_runs` defaults to **`dry_run=true`**; set `dry_run=false` to delete.
@@ -200,7 +207,54 @@ Optional: add `[mcp_servers.review-agent.tools.review_clean_runs]` with `approva
 
 Restart Codex (or reload MCP configuration) after editing `config.toml`.
 
-### MCP tools
+### PDF → Markdown only (Codex / other agents)
+
+When an agent **only needs MinerU parsing** and not simulated review, register the separate **PDF→MD MCP server** (`run_mcp_convert.py`) alongside—or instead of—the full review server:
+
+```toml
+[mcp_servers.review-pdf2md]
+command = "<PROJECT_ROOT>/.venv/Scripts/python.exe"
+args = ["<PROJECT_ROOT>/run_mcp_convert.py"]
+cwd = "<PROJECT_ROOT>"
+startup_timeout_sec = 30
+tool_timeout_sec = 600
+
+[mcp_servers.review-pdf2md.env]
+PYTHONIOENCODING = "utf-8"
+
+[mcp_servers.review-pdf2md.tools.pdf2md_check_env]
+approval_mode = "approve"
+
+[mcp_servers.review-pdf2md.tools.pdf2md_convert]
+approval_mode = "approve"
+
+[mcp_servers.review-pdf2md.tools.pdf2md_resume]
+approval_mode = "approve"
+
+[mcp_servers.review-pdf2md.tools.pdf2md_read_markdown]
+approval_mode = "approve"
+```
+
+On Linux or macOS, set `command` to `<PROJECT_ROOT>/.venv/bin/python`.
+
+| Tool | Description |
+|------|-------------|
+| `pdf2md_check_env` | MinerU API preflight only |
+| `pdf2md_convert` | Parse a new PDF to `<paper_name>.md` under `data/runs/` |
+| `pdf2md_resume` | Resume in an existing workspace (skips if `.md` already exists) |
+| `pdf2md_read_markdown` | Read converted Markdown from a workspace |
+
+Manual start (debug):
+
+```bash
+python run_mcp_convert.py
+# or
+python main.py mcp-convert
+```
+
+Implementation: `review_agent/mcp_convert_server.py`. CLI equivalent: `python main.py convert paper.pdf`.
+
+### MCP tools (full review)
 
 | Tool | Description |
 |------|-------------|

@@ -180,6 +180,32 @@ def _catalog_sections(
     return sections
 
 
+def resolve_reference_binding(
+    md: str, headings: list[dict[str, Any]], heading_index: int | None
+) -> dict[str, Any] | None:
+    """Resolve a single bibliography heading to a char-range binding."""
+    if heading_index is None:
+        return None
+    bindings = _resolve_task_bindings(md, headings, [int(heading_index)])
+    return bindings[0] if bindings else None
+
+
+def apply_reference_to_section_map(
+    section_map: dict[str, Any],
+    md: str,
+    headings: list[dict[str, Any]],
+    heading_index: int | None,
+) -> dict[str, Any]:
+    binding = resolve_reference_binding(md, headings, heading_index)
+    if binding:
+        section_map["reference_binding"] = binding
+        section_map["reference_range"] = [binding["start"], binding["end"]]
+    else:
+        section_map.pop("reference_binding", None)
+        section_map.pop("reference_range", None)
+    return section_map
+
+
 def resolve_section_map(
     md: str, labels: dict[str, Any], headings: list[dict[str, Any]]
 ) -> dict[str, Any]:
@@ -298,6 +324,12 @@ def format_section_map_summary(section_map: dict[str, Any]) -> str:
     lines = [f"Title: {section_map.get('title', '')}"]
     if section_map.get("abstract_range"):
         lines.append(f"Abstract: chars {section_map['abstract_range']}")
+    ref = section_map.get("reference_binding")
+    if ref:
+        lines.append(
+            f"references: {ref.get('heading', '?')} "
+            f"chars [{ref.get('start')}, {ref.get('end')}]"
+        )
     for task in TASK_NAMES:
         bindings = section_map.get(f"{task}_bindings") or []
         if not bindings:

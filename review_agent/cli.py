@@ -13,6 +13,7 @@ from review_agent.pipeline import (
     generate_review,
     quality_check,
     structure_sections,
+    split_references,
 )
 from review_agent.pipeline.step_utils import hydrate_state_from_workspace
 from review_agent.state import ReviewState
@@ -26,6 +27,47 @@ from review_agent.utils.preflight import run_preflight
 from review_agent.utils.runs_cli import cmd_runs_clean, cmd_runs_list
 
 logger = get_logger(__name__)
+
+
+def run_convert_pipeline(
+    source_pdf: Path,
+    *,
+    work_dir: str | None = None,
+    skip_preflight: bool = False,
+    with_quality_check: bool = False,
+) -> ReviewState:
+    workspace, copied_pdf = init_workspace(source_pdf, work_dir)
+
+    if work_dir:
+        logger.info("Resuming work directory: %s", workspace)
+    else:
+        logger.info("Paper workspace: %s", workspace)
+
+    state = ReviewState(
+        pdf_path=str(copied_pdf),
+        work_dir=str(workspace),
+    )
+    hydrate_state_from_workspace(state)
+
+    need_mineru = not (
+        state.markdown_path and Path(state.markdown_path).is_file()
+    )
+    if not skip_preflight:
+        run_preflight(
+            need_mineru=need_mineru,
+            need_fast=False,
+            need_pro=False,
+            need_pro2=False,
+        )
+
+    convert_pdf(state)
+
+    if with_quality_check:
+        quality_check(state)
+        if state.markdown_quality == "BAD":
+            raise RuntimeError("Markdown quality too low")
+
+    return state
 
 
 def run_pipeline(
@@ -68,6 +110,7 @@ def run_pipeline(
         raise RuntimeError("Markdown quality too low")
 
     structure_sections(state)
+    split_references(state)
     extract_contribution(state)
     extract_experiment(state)
     if state.run_compare:
@@ -90,6 +133,50 @@ def cmd_check_env(args: argparse.Namespace) -> int:
     logger.info("All configured API checks passed.")
     if settings.LLM_STUB:
         logger.warning("LLM_STUB=1: LLM connectivity was not fully exercised.")
+    return 0
+
+
+def cmd_convert(args: argparse.Namespace) -> int:
+    try:
+        if args.work_dir:
+            _, pdf = resolve_work_dir(args.work_dir)
+            if args.pdf_path:
+                logger.warning(
+                    "Ignoring pdf_path with --work-dir; using PDF in workspace: %s",
+                    pdf.name,
+                )
+        else:
+            pdf = resolve_pdf_path(args.pdf_path)
+    except (FileNotFoundError, ValueError) as exc:
+        logger.error("%s", exc)
+        return 1
+
+    if args.pdf_path is None and not args.work_dir:
+        logger.info("No pdf_path argument; using: %s", pdf)
+
+    try:
+        state = run_convert_pipeline(
+            pdf,
+            work_dir=args.work_dir,
+            skip_preflight=args.skip_preflight,
+            with_quality_check=args.quality_check,
+        )
+    except Exception as exc:
+        logger.error("PDF conversion failed: %s", exc)
+        if args.work_dir:
+            logger.info(
+                "Resume with: python main.py convert --work-dir %s", args.work_dir
+            )
+        else:
+            logger.info(
+                "If a workspace was created, resume with: "
+                "python main.py convert --work-dir data/runs/<folder>"
+            )
+        return 1
+
+    logger.info("PDF converted successfully.")
+    logger.info("Paper workspace: %s", state.work_dir)
+    logger.info("Markdown: %s", state.markdown_path)
     return 0
 
 
@@ -150,6 +237,33 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     sub = parser.add_subparsers(dest="command")
+
+    convert_p = sub.add_parser(
+        "convert",
+        help="Convert PDF to Markdown only (MinerU; no LLM review steps)",
+    )
+    convert_p.add_argument(
+        "pdf_path",
+        nargs="?",
+        default=None,
+        help="Input PDF path (optional if resuming with --work-dir)",
+    )
+    convert_p.add_argument(
+        "--work-dir",
+        default=None,
+        help="Resume an existing run under data/runs/",
+    )
+    convert_p.add_argument(
+        "--quality-check",
+        action="store_true",
+        help="Run local markdown quality check after conversion",
+    )
+    convert_p.add_argument(
+        "--skip-preflight",
+        action="store_true",
+        help="Skip MinerU connectivity check at startup",
+    )
+    convert_p.set_defaults(func=cmd_convert)
 
     run_p = sub.add_parser(
         "run",
@@ -222,7 +336,20 @@ def build_parser() -> argparse.ArgumentParser:
     mcp_p = sub.add_parser("mcp", help="Start MCP server on stdio (for Cursor)")
     mcp_p.set_defaults(func=_cmd_mcp)
 
+    mcp_convert_p = sub.add_parser(
+        "mcp-convert",
+        help="Start PDF→MD-only MCP server on stdio",
+    )
+    mcp_convert_p.set_defaults(func=_cmd_mcp_convert)
+
     return parser
+
+
+def _cmd_mcp_convert(_args: argparse.Namespace) -> int:
+    from review_agent.mcp_convert_server import main as mcp_convert_main
+
+    mcp_convert_main()
+    return 0
 
 
 def _cmd_mcp(_args: argparse.Namespace) -> int:
@@ -236,7 +363,16 @@ def _normalize_argv(argv: list[str]) -> list[str]:
     """Backward compatibility: `python main.py paper.pdf` → `run paper.pdf`."""
     if not argv:
         return ["run"]
-    if argv[0] in ("run", "check-env", "runs", "mcp", "-h", "--help"):
+    if argv[0] in (
+        "run",
+        "convert",
+        "check-env",
+        "runs",
+        "mcp",
+        "mcp-convert",
+        "-h",
+        "--help",
+    ):
         return argv
     if argv[0].startswith("-"):
         return ["run", *argv]
@@ -253,6 +389,11 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(normalized)
 
+    if args.command == "convert":
+        if not args.pdf_path and not args.work_dir:
+            parser.error("convert requires pdf_path or --work-dir")
+        return cmd_convert(args)
+
     if args.command == "run":
         if not args.pdf_path and not args.work_dir:
             parser.error("run requires pdf_path or --work-dir")
@@ -266,6 +407,9 @@ def main(argv: list[str] | None = None) -> int:
         if func is None:
             parser.error("runs requires a subcommand: list | clean")
         return func(args)
+
+    if args.command == "mcp-convert":
+        return _cmd_mcp_convert(args)
 
     if args.command == "mcp":
         return _cmd_mcp(args)

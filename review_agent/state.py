@@ -8,6 +8,7 @@ class ReviewState:
     pdf_path: str
     work_dir: str = ""
     markdown_path: str = ""
+    references_path: str = ""
     section_map: dict[str, Any] = field(default_factory=dict)
     markdown_quality: str = ""
     contribution_report: str = ""

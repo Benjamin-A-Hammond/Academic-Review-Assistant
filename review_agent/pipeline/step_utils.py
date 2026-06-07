@@ -43,6 +43,10 @@ def hydrate_state_from_workspace(state: ReviewState) -> None:
     if section_map_raw:
         state.section_map = json.loads(section_map_raw)
 
+    ref_md = state.output_path("references.md")
+    if ref_md.is_file():
+        state.references_path = str(ref_md.resolve())
+
     contrib = load_step_output(state, "contribution.md")
     if contrib:
         state.contribution_report = contrib
