@@ -1,6 +1,6 @@
 # Academic Review Assistant
 
-> **Version 0.1.0** · Initial release
+> **Version 1.1.0** · Reference split & standalone PDF→MD conversion
 
 **Language / 语言:** [English](README.en.md) · [简体中文](README.zh-CN.md)
 
@@ -26,7 +26,8 @@ flowchart LR
   M --> MD[Markdown]
   MD --> Q[Quality check]
   Q --> F[Fast task section binding]
-  F --> P[Pro contribution / experiment]
+  F --> Ref[Fast reference split]
+  Ref --> P[Pro contribution / experiment]
   P --> R{Dual model?}
   R -->|No| R1[Pro simulated review]
   R -->|Yes| R2[Pro + Pro2 merged review]
@@ -145,7 +146,7 @@ MCP does not replace the CLI; it exposes **pre-submission self-check / simulated
 ### Enable in Cursor
 
 1. `pip install -r requirements.txt` (includes `fastmcp`)
-2. `.cursor/mcp.json` is included; opening the repo loads the `review-agent` server
+2. `.cursor/mcp.json` is included; opening the repo loads `review-agent` (full review) and `review-pdf2md` (PDF→Markdown only)
 3. If Python is not on PATH, set full path in Cursor **Settings → MCP**, e.g. `C:/Python313/python.exe`
 
 Manual start (debug):
@@ -264,9 +265,16 @@ Implementation: `review_agent/mcp_convert_server.py`. CLI equivalent: `python ma
 | `review_list_runs` | List past runs |
 | `review_clean_runs` | Clean runs (default dry-run) |
 | `review_run_status` | Files produced in a run |
-| `review_read_report` | Read report content from a run |
+| `review_read_report` | Read report content from a run (e.g. `contribution.md`, `references.md`) |
 
 Implementation: `review_agent/mcp_server.py` ([FastMCP](https://github.com/PrefectHQ/fastmcp) + stdio).
+
+## Release history
+
+| Version | Notes |
+|---------|-------|
+| **1.1.0** | Step 3b reference split (`references.md`); `convert` CLI and `review-pdf2md` MCP server |
+| **1.0.0** | Initial release: PDF parse → section map → contribution/experiment → simulated review; full CLI & MCP pipeline |
 
 ## Development
 

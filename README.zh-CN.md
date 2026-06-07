@@ -1,6 +1,6 @@
 # Academic Review Assistant
 
-> **Version 0.1.0** · 初版
+> **Version 1.1.0** · 参考文献拆分与独立 PDF→MD 转换
 
 **Language / 语言:** [English](README.en.md) · [简体中文](README.zh-CN.md)
 
@@ -26,7 +26,8 @@ flowchart LR
   M --> MD[Markdown]
   MD --> Q[质量检查]
   Q --> F[Fast 任务章节绑定]
-  F --> P[Pro 贡献 / 实验分析]
+  F --> Ref[Fast 参考文献拆分]
+  Ref --> P[Pro 贡献 / 实验分析]
   P --> R{双模型?}
   R -->|否| R1[Pro 模拟审稿]
   R -->|是| R2[Pro + Pro2 合并模拟审稿]
@@ -145,7 +146,7 @@ MCP 不是替代 CLI，而是在 IDE 里把**投稿前自查 / 模拟审稿**流
 ### 在 Cursor 中启用
 
 1. `pip install -r requirements.txt`（含 `fastmcp`）
-2. 项目已包含 `.cursor/mcp.json`，打开本仓库后 Cursor 会加载 `review-agent` 服务器
+2. 项目已包含 `.cursor/mcp.json`，打开本仓库后 Cursor 会加载 `review-agent`（完整审稿）与 `review-pdf2md`（仅 PDF→Markdown）两个 MCP 服务器
 3. 若 Python 不在 PATH，请在 Cursor **Settings → MCP** 中把 `command` 改为完整路径，例如 `C:/Python313/python.exe`
 
 手动启动（调试）：
@@ -264,9 +265,16 @@ python main.py mcp-convert
 | `review_list_runs` | 列出历史 run |
 | `review_clean_runs` | 清理 run（默认 dry-run） |
 | `review_run_status` | 查看某次 run 已生成哪些文件 |
-| `review_read_report` | 读取某次 run 的报告内容 |
+| `review_read_report` | 读取某次 run 的报告内容（如 `contribution.md`、`references.md` 等） |
 
 实现见 `review_agent/mcp_server.py`（[FastMCP](https://github.com/PrefectHQ/fastmcp) + stdio）。
+
+## 版本历史
+
+| 版本 | 说明 |
+|------|------|
+| **1.1.0** | 新增 Step 3b 参考文献拆分（`references.md`）；新增 `convert` CLI 与 `review-pdf2md` MCP 服务 |
+| **1.0.0** | 初版：PDF 解析 → 章节识别 → 贡献/实验分析 → 模拟审稿；CLI 与 MCP 完整审稿流水线 |
 
 ## 二次开发
 

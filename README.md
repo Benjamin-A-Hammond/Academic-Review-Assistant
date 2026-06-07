@@ -1,6 +1,6 @@
 # Academic Review Assistant
 
-> **Version 0.1.0** · Initial release（初版）
+> **Version 1.1.0** · Reference split & standalone PDF→MD（参考文献拆分与独立 PDF→MD 转换）
 
 **Language / 语言:** [English](README.en.md) · [简体中文](README.zh-CN.md)
 
